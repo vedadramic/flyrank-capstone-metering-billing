@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "Usage Metering & Billing Engine — the backend service that tracks how much customers use, enforces plan quotas, calculates costs, and integrates Stripe for subscription management.",
   "main": "index.js",
-  "scripts": {
-  "start": "node src/app.js",
+"scripts": {
+  "start": "node --env-file=.env src/server.js",
   "test": "jest --runInBand"
 },
   "repository": {

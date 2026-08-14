@@ -1,0 +1,10 @@
+run: docker compose up
+seed: node src/scripts/seed.js
+test: npm test
+base_url: http://localhost:3000
+endpoints:
+  - POST /generate
+  - GET /usage
+  - POST /webhooks/stripe
+  - POST /auth/signup
+  - POST /auth/login

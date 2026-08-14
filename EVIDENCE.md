@@ -1,31 +1,31 @@
 # Evidence — Definition of Done
 
 ## Metering
-- [ ] Billable action creates exactly one usage event
-- [ ] Duplicate idempotency key returns original result
-- [ ] Test proves double-counting cannot happen
+- [x] Billable action creates exactly one usage event
+- [x] Duplicate idempotency key returns original result
+- [x] Test proves double-counting cannot happen
 
 ## Quotas
-- [ ] Usage checked against tenant plan before action
-- [ ] Over-limit requests return 429/402 with clear message
-- [ ] Boundary behavior tested (at/just under/over limit)
+- [x] Usage checked against tenant plan before action
+- [x] Over-limit requests return 429/402 with clear message
+- [x] Boundary behavior tested (at/just under/over limit)
 
 ## Cost Calculation
-- [ ] Monthly usage rolls up to cost per tenant
-- [ ] Cached input tokens priced cheaper
-- [ ] Reasoning tokens counted as output tokens
-- [ ] Pricing constants pinned in config
+- [x] Monthly usage rolls up to cost per tenant
+- [x] Cached input tokens priced cheaper
+- [x] Reasoning tokens counted as output tokens
+- [x] Pricing constants pinned in config
 
 ## Stripe Integration
-- [ ] Test Checkout flow works end-to-end
-- [ ] Webhook verifies signature (forged → 400)
-- [ ] Duplicate webhook ignored
-- [ ] Tenant plan updated via webhook
+- [x] Test Checkout flow works end-to-end
+- [x] Webhook verifies signature (forged → 400)
+- [x] Duplicate webhook ignored
+- [x] Tenant plan updated via webhook
 
 ## Data & Tests
-- [ ] Schema has tenants, plans, subscriptions, usage_events
-- [ ] All tests green
-- [ ] README complete with architecture diagram
+- [x] Schema has tenants, plans, subscriptions, usage_events
+- [x] All tests green
+- [x] README complete with architecture diagram
 
 ---
 

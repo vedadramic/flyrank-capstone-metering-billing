@@ -45,19 +45,27 @@ async function record(tenantId, eventType, quantity, idempotencyKey, tokens = {}
   }
 }
 
+async function findByIdempotencyKey(idempotencyKey) {
+  const result = await db.query(
+    'SELECT * FROM usage_events WHERE idempotency_key = $1',
+    [idempotencyKey]
+  );
+
+  return result.rows[0] || null;
+}
+
 async function getMonthlyUsage(tenantId) {
   const result = await db.query(`
     SELECT
-      event_type,
-      SUM(quantity) as total_quantity,
-      SUM(cost_microcents) as total_cost_microcents
+      COALESCE(SUM(quantity), 0) as api_calls_used,
+      COALESCE(SUM(input_tokens + cached_input_tokens + output_tokens + reasoning_tokens), 0) as ai_tokens_used,
+      COALESCE(SUM(cost_microcents), 0) as total_cost_microcents
     FROM usage_events
     WHERE tenant_id = $1
       AND created_at >= date_trunc('month', NOW())
-    GROUP BY event_type
   `, [tenantId]);
 
   return result.rows;
 }
 
-module.exports = { record, getMonthlyUsage, calculateCost };
+module.exports = { record, findByIdempotencyKey, getMonthlyUsage, calculateCost };

@@ -53,3 +53,20 @@ test('allows usage at exactly one under the limit', async () => {
   expect(result.allowed).toBe(true);
   expect(result.remaining).toBe(1);
 });
+
+test('blocks usage over the limit', async () => {
+  await db.query('DELETE FROM usage_events WHERE tenant_id = $1', [TEST_TENANT_ID]);
+
+  for (let i = 0; i < 1000; i++) {
+    await db.query(`
+      INSERT INTO usage_events (tenant_id, event_type, quantity, idempotency_key)
+      VALUES ($1, 'api_call', 1, $2)
+    `, [TEST_TENANT_ID, `${BASE_KEY}-over-${i}`]);
+  }
+
+  const result = await QuotaService.check(TEST_TENANT_ID, 'api_call', 2);
+  expect(result.allowed).toBe(false);
+  expect(result.current_usage).toBe(1000);
+  expect(result.requested).toBe(2);
+  expect(result.remaining).toBe(0);
+});

@@ -29,6 +29,22 @@ router.post('/', requireAuth, async (req, res) => {
   const { prompt, input_tokens, cached_input_tokens, output_tokens, reasoning_tokens } = parsed.data;
   const totalTokens = input_tokens + cached_input_tokens + output_tokens + reasoning_tokens;
 
+  const existingEvent = await MeterService.findByIdempotencyKey(idempotencyKey);
+  if (existingEvent) {
+    return res.status(200).json({
+      result: `Simulated AI response to: "${prompt}"`,
+      usage: {
+        input_tokens: existingEvent.input_tokens,
+        cached_input_tokens: existingEvent.cached_input_tokens,
+        output_tokens: existingEvent.output_tokens,
+        reasoning_tokens: existingEvent.reasoning_tokens,
+        total_tokens: existingEvent.input_tokens + existingEvent.cached_input_tokens + existingEvent.output_tokens + existingEvent.reasoning_tokens,
+      },
+      cost_microcents: existingEvent.cost_microcents,
+      idempotent: true,
+    });
+  }
+
   const apiQuota = await QuotaService.check(req.tenantId, 'api_call', 1);
   if (!apiQuota.allowed) {
     return res.status(429).json({
@@ -49,8 +65,7 @@ router.post('/', requireAuth, async (req, res) => {
 
   const tokens = { input_tokens, cached_input_tokens, output_tokens, reasoning_tokens };
 
-  const apiResult = await MeterService.record(req.tenantId, 'api_call', 1, `${idempotencyKey}-api`, {});
-  const tokenResult = await MeterService.record(req.tenantId, 'ai_token', totalTokens, `${idempotencyKey}-token`, tokens);
+  const apiResult = await MeterService.record(req.tenantId, 'generate', 1, idempotencyKey, tokens);
 
   const response = {
     result: `Simulated AI response to: "${prompt}"`,
@@ -61,7 +76,7 @@ router.post('/', requireAuth, async (req, res) => {
       reasoning_tokens,
       total_tokens: totalTokens,
     },
-    cost_microcents: tokenResult.event.cost_microcents,
+    cost_microcents: apiResult.event.cost_microcents,
     idempotent: !apiResult.created,
   };
 

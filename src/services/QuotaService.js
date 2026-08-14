@@ -15,13 +15,16 @@ async function check(tenantId, eventType, quantity) {
     throw new Error('Tenant not found');
   }
 
-  const usageResult = await db.query(`
-    SELECT COALESCE(SUM(quantity), 0) as used
-    FROM usage_events
-    WHERE tenant_id = $1
-      AND event_type = $2
-      AND created_at >= date_trunc('month', NOW())
-  `, [tenantId, eventType]);
+  let usageSql;
+  if (eventType === 'api_call') {
+    usageSql = `SELECT COALESCE(SUM(quantity), 0) as used FROM usage_events WHERE tenant_id = $1 AND created_at >= date_trunc('month', NOW())`;
+  } else if (eventType === 'ai_token') {
+    usageSql = `SELECT COALESCE(SUM(input_tokens + cached_input_tokens + output_tokens + reasoning_tokens), 0) as used FROM usage_events WHERE tenant_id = $1 AND created_at >= date_trunc('month', NOW())`;
+  } else {
+    throw new Error(`Unknown event type: ${eventType}`);
+  }
+
+  const usageResult = await db.query(usageSql, [tenantId]);
 
   const currentUsage = parseInt(usageResult.rows[0].used, 10);
 

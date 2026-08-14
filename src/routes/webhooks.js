@@ -47,6 +47,23 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
           WHERE id = $1
         `, [tenantId, customerId, subscriptionId]);
 
+        await db.query(`
+          INSERT INTO subscriptions (
+            tenant_id,
+            plan_id,
+            stripe_customer_id,
+            stripe_subscription_id,
+            status
+          )
+          VALUES ($1, (SELECT id FROM plans WHERE name = 'pro'), $2, $3, 'active')
+          ON CONFLICT (tenant_id) DO UPDATE SET
+            plan_id = EXCLUDED.plan_id,
+            stripe_customer_id = EXCLUDED.stripe_customer_id,
+            stripe_subscription_id = EXCLUDED.stripe_subscription_id,
+            status = EXCLUDED.status,
+            updated_at = NOW()
+        `, [tenantId, customerId, subscriptionId]);
+
         console.log(`Tenant ${tenantId} upgraded to Pro`);
       }
       break;
@@ -59,6 +76,11 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
 
       await db.query(`
         UPDATE tenants SET subscription_status = $1
+        WHERE stripe_customer_id = $2
+      `, [status, customerId]);
+
+      await db.query(`
+        UPDATE subscriptions SET status = $1, updated_at = NOW()
         WHERE stripe_customer_id = $2
       `, [status, customerId]);
 
@@ -75,6 +97,15 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
           plan_id = (SELECT id FROM plans WHERE name = 'free'),
           stripe_subscription_id = NULL,
           subscription_status = 'canceled'
+        WHERE stripe_customer_id = $1
+      `, [customerId]);
+
+      await db.query(`
+        UPDATE subscriptions SET
+          plan_id = (SELECT id FROM plans WHERE name = 'free'),
+          stripe_subscription_id = NULL,
+          status = 'canceled',
+          updated_at = NOW()
         WHERE stripe_customer_id = $1
       `, [customerId]);
 

@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) {
@@ -47,6 +48,16 @@ loadEnvFile(localEnvPath);
 
 if (!process.env.DATABASE_URL || !process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET) {
   loadEnvFile(exampleEnvPath);
+}
+
+const migrateResult = spawnSync(process.execPath, [path.join(projectRoot, 'src', 'scripts', 'migrate.js')], {
+  cwd: projectRoot,
+  stdio: 'inherit',
+  env: process.env,
+});
+
+if (migrateResult.status !== 0) {
+  process.exit(migrateResult.status || 1);
 }
 
 require('jest/bin/jest');

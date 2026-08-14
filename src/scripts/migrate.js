@@ -27,6 +27,19 @@ async function migrate() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id SERIAL PRIMARY KEY,
+      tenant_id INTEGER REFERENCES tenants(id) NOT NULL UNIQUE,
+      plan_id INTEGER REFERENCES plans(id) NOT NULL DEFAULT 1,
+      stripe_customer_id TEXT,
+      stripe_subscription_id TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS usage_events (
       id SERIAL PRIMARY KEY,
       tenant_id INTEGER REFERENCES tenants(id) NOT NULL,

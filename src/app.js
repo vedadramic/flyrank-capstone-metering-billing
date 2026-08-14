@@ -9,7 +9,7 @@ app.use('/auth', require('./routes/auth'));
 app.use('/generate', require('./routes/generate'));
 app.use('/usage', require('./routes/usage'));
 app.use('/webhooks', require('./routes/webhooks'));
-
+app.use('/checkout', require('./routes/checkout'));
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 app.use((err, req, res, next) => {

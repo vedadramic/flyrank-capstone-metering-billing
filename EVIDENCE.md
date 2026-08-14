@@ -28,3 +28,23 @@
 - [ ] README complete with architecture diagram
 
 ---
+
+## Current proof
+
+### Metering
+- `npm test` passes `src/tests/meter.test.js`
+- The idempotency test confirms the same key returns the same event id
+
+### Quotas
+- `npm test` passes `src/tests/quota.test.js`
+- Boundary coverage exists for under-limit and exact-limit behavior
+
+### Cost Calculation
+- `MeterService.calculateCost()` is covered for cached input and reasoning token pricing
+
+### Stripe Integration
+- `src/tests/webhook.test.js` verifies forged webhook signatures return 400
+
+### Data & Tests
+- `npm test` passes in this workspace
+- The local database URL stays on port 5433 in `.env.example` and `.env`

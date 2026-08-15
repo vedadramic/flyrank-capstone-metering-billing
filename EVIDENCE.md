@@ -1,6 +1,6 @@
 # Evidence — Definition of Done
 
-Evidence was regenerated during finalization on 2026-08-15. A checked box below has a code, test, or terminal proof. The real Stripe Checkout box remains unchecked until the manual test-mode flow is completed.
+Evidence was regenerated during finalization on 2026-08-15. A checked box below has a code, test, or terminal proof. Automated Stripe tests and the real Stripe test-mode acceptance run are identified separately.
 
 ## Core checklist
 
@@ -31,9 +31,10 @@ Evidence was regenerated during finalization on 2026-08-15. A checked box below 
   - `src/config/pricing.js` contains only integer `PRICING_MICROCENTS` constants and `MICROCENTS_PER_USD = 100000000`.
   - The pricing tests above use exact equality, not approximate floating-point comparisons.
 
-- [ ] Subscription checkout works end-to-end in Stripe test mode.
-  - Automated proof only: `src/tests/checkout.test.js` proves the authenticated route sends subscription mode, the configured price, and tenant metadata to a mocked Stripe client.
-  - Not yet claimed: a browser Checkout using `4242 4242 4242 4242` and a real Stripe CLI webhook must still flip `demo@example.com` from Free to Pro.
+- [x] Subscription checkout works end-to-end in Stripe test mode.
+  - Automated proof: `src/tests/checkout.test.js` proves the authenticated route sends subscription mode, the configured price, and tenant metadata to a mocked Stripe client.
+  - Real test-mode proof: the configured price was read from the Stripe API as active, recurring monthly, attached to an active product, and not live mode. The authenticated application route created a real Checkout Session; Checkout was completed with Stripe test card `4242 4242 4242 4242` while Stripe CLI forwarded the signed event.
+  - Before Checkout, `GET /usage` returned Free limits of 1,000 API calls and 100,000 tokens. After the real webhook worker completed, it returned plan `pro` with limits of 100,000 API calls and 10,000,000 tokens. A database read confirmed `subscription_status = active`, populated Stripe customer/subscription references, and a completed `checkout.session.completed` job with `attempts = 1`.
 
 - [x] Webhooks verify signatures, deduplicate events, and update plan/status.
   - `a forged signature returns 400 and changes nothing` also proves no job is inserted.
@@ -47,7 +48,7 @@ Evidence was regenerated during finalization on 2026-08-15. A checked box below 
   - `idempotency keys are isolated per tenant` uses the same key for two tenants with different prompts and proves each receives only its own result.
 
 - [x] Tests cover the required scary cases.
-  - `npm test` result: `Test Suites: 6 passed, 6 total`; `Tests: 25 passed, 25 total`; `Time: 2.117 s`.
+  - `npm test` result: `Test Suites: 6 passed, 6 total`; `Tests: 25 passed, 25 total`; `Time: 2.168 s`.
   - Coverage includes retries, payload conflict, tenant isolation, 999/1000/over, concurrent quota requests, all token prices, monthly rollup, forged/live/duplicate webhooks, safe retry, terminal failure, updated, and deleted.
 
 - [x] README, architecture, setup, and submission-pack files are present.
@@ -60,11 +61,11 @@ Evidence was regenerated during finalization on 2026-08-15. A checked box below 
 |---|---|---|
 | 1 — identical billable retry creates one event | Pass | `an identical retry returns the original response and creates one event` |
 | 2 — exact quota boundary then clear refusal | Pass | exact 1,000 test plus concurrent 999 test |
-| 3 — real Stripe Checkout flips Free to Pro | Pending manual | mocked session creation and real webhook logic pass; browser/Stripe CLI run not yet performed |
-| 4 — forged webhook rejected; replay processed once | Partial | forged `400` and signed duplicate job tests pass; a replay of an actual Stripe CLI event remains part of the manual run |
+| 3 — real Stripe Checkout flips Free to Pro | Pass | real Stripe test Checkout and CLI-forwarded webhook changed the seeded tenant from Free to Pro; the completed background job had one attempt |
+| 4 — forged webhook rejected; replay processed once | Pass | forged signature returned `400`, inserted no job, and left Pro unchanged; two valid replays of the actual stored Stripe event returned `200` with `duplicate: true`, leaving one completed job with `attempts = 1` |
 | 5 — pinned pricing and `/usage` match | Pass | exact integer pricing tests plus current-month `/usage` test |
 
-`npm run test:acceptance` result: `Test Suites: 5 passed, 5 total`; `Tests: 21 passed, 21 total`; `Time: 2.026 s`.
+`npm run test:acceptance` result: `Test Suites: 5 passed, 5 total`; `Tests: 21 passed, 21 total`; `Time: 2.029 s`.
 
 ## Shared requirements and runtime proof
 

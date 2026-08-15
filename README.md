@@ -144,7 +144,7 @@ npm run test:acceptance
 
 The deterministic suite covers tenant idempotency isolation, payload conflicts, identical retries, concurrent quota requests, 999/1,000/over boundaries, `402`, all integer pricing categories, monthly rollup, forged and live Stripe events, duplicate jobs, safe retry, terminal failure alert, and subscription update/deletion.
 
-The automated Checkout test mocks Stripe's network call. A real test-mode Checkout remains a separate manual acceptance step and must not be claimed from that unit test alone.
+The automated Checkout test mocks Stripe's network call. The real test-mode Checkout is a separate manual acceptance step; the completed finalization run and its CLI/webhook/database results are recorded separately in `EVIDENCE.md`.
 
 ## Six-minute demo
 

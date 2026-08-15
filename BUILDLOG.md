@@ -56,6 +56,6 @@ The final review used real commands rather than trusting old checkboxes: `npm ci
 - The original webhook deduplication order could lose a valid retry after a partial failure.
 - A first PDF parser installation attempt was unnecessary for the project and timed out; the requirements were then read without changing repository dependencies.
 
-## Student-owned constraints and pending decision
+## Student-owned constraints and confirmations
 
-The requested constraints shaped the implementation: keep CommonJS, avoid Redis and extra services, use PostgreSQL for the required background job, avoid stretch goals, and use Stripe test mode only. The real Stripe browser/CLI acceptance run is intentionally still pending; no EVIDENCE checkbox claims it passed before that manual confirmation happens.
+The requested constraints shaped the implementation: keep CommonJS, avoid Redis and extra services, use PostgreSQL for the required background job, avoid stretch goals, and use Stripe test mode only. The student confirmed the Sandbox account and active recurring monthly Pro price, completed Stripe CLI login/listening, and completed the browser Checkout with the test card. The final verification then proved the CLI-forwarded webhook changed the seeded Free tenant to Pro through a completed PostgreSQL job, rejected a forged signature without state changes, and deduplicated two valid replays of the actual event.

@@ -98,6 +98,19 @@ test('a forged signature returns 400 and changes nothing', async () => {
   expect(Number(jobs.rows[0].count)).toBe(0);
 });
 
+test('a signed live-mode event is rejected before it can be queued', async () => {
+  const event = { ...checkoutEvent('evt_phase3_live'), livemode: true };
+  const response = await signedEvent(event);
+
+  expect(response.status).toBe(400);
+  expect(response.body.error).toContain('Live-mode');
+
+  const jobs = await db.query(`
+    SELECT COUNT(*) FROM background_jobs WHERE deduplication_key = $1
+  `, [event.id]);
+  expect(Number(jobs.rows[0].count)).toBe(0);
+});
+
 test('a signed event is queued once and marked completed only after tenant changes commit', async () => {
   const event = checkoutEvent('evt_phase3_checkout');
   const first = await signedEvent(event);

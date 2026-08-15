@@ -15,14 +15,20 @@ test('request hashes are stable for the same validated payload', () => {
   );
 });
 
-test('cached input tokens are cheaper than regular input tokens', () => {
-  const regularCost = MeterService.calculateCost({ input_tokens: 1000 });
-  const cachedCost = MeterService.calculateCost({ cached_input_tokens: 1000 });
-  expect(cachedCost).toBeLessThan(regularCost);
+test.each([
+  ['input', { input_tokens: 1 }, 300],
+  ['cached input', { cached_input_tokens: 1 }, 150],
+  ['output', { output_tokens: 1 }, 1500],
+  ['reasoning', { reasoning_tokens: 1 }, 1500],
+])('%s token pricing is pinned to exact integer microcents', (name, tokens, expected) => {
+  expect(MeterService.calculateCost(tokens)).toBe(expected);
 });
 
-test('reasoning tokens cost the same as output tokens', () => {
-  const outputCost = MeterService.calculateCost({ output_tokens: 1000 });
-  const reasoningCost = MeterService.calculateCost({ reasoning_tokens: 1000 });
-  expect(reasoningCost).toBe(outputCost);
+test('all token categories are added with integer math', () => {
+  expect(MeterService.calculateCost({
+    input_tokens: 1,
+    cached_input_tokens: 1,
+    output_tokens: 1,
+    reasoning_tokens: 1,
+  })).toBe(3450);
 });

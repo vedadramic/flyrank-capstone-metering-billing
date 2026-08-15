@@ -50,7 +50,7 @@ async function migrate() {
       cached_input_tokens INTEGER DEFAULT 0,
       output_tokens INTEGER DEFAULT 0,
       reasoning_tokens INTEGER DEFAULT 0,
-      cost_microcents INTEGER DEFAULT 0,
+      cost_microcents BIGINT DEFAULT 0,
       request_hash TEXT,
       response_json JSONB,
       created_at TIMESTAMPTZ DEFAULT NOW()
@@ -61,6 +61,9 @@ async function migrate() {
     ALTER TABLE usage_events
       ADD COLUMN IF NOT EXISTS request_hash TEXT,
       ADD COLUMN IF NOT EXISTS response_json JSONB;
+
+    ALTER TABLE usage_events
+      ALTER COLUMN cost_microcents TYPE BIGINT;
 
     UPDATE usage_events
     SET request_hash = 'legacy-' || id
@@ -76,6 +79,24 @@ async function migrate() {
 
     ALTER TABLE usage_events
       DROP CONSTRAINT IF EXISTS usage_events_idempotency_key_key;
+  `);
+
+  await pool.query(`
+    UPDATE usage_events
+    SET cost_microcents =
+      input_tokens::bigint * 300
+      + cached_input_tokens::bigint * 150
+      + output_tokens::bigint * 1500
+      + reasoning_tokens::bigint * 1500;
+
+    UPDATE usage_events
+    SET response_json = jsonb_set(
+      response_json,
+      '{cost_microcents}',
+      to_jsonb(cost_microcents),
+      true
+    )
+    WHERE response_json <> '{}'::jsonb;
   `);
 
   await pool.query(`

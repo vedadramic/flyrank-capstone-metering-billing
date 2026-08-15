@@ -17,6 +17,10 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
     return res.status(400).json({ error: `Webhook error: ${err.message}` });
   }
 
+  if (event.livemode === true) {
+    return res.status(400).json({ error: 'Live-mode Stripe events are not accepted' });
+  }
+
   const result = await WebhookJobService.enqueueStripeEvent(event);
   if (!result.created) {
     return res.json({

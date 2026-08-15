@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const db = require('../db');
-const { PRICING } = require('../config/pricing');
+const { PRICING_MICROCENTS } = require('../config/pricing');
 
 const PAYMENT_BLOCKED_STATUSES = new Set([
   'incomplete',
@@ -11,12 +11,10 @@ const PAYMENT_BLOCKED_STATUSES = new Set([
 ]);
 
 function calculateCost(tokens) {
-  const inputCost = (tokens.input_tokens || 0) * PRICING.input_token;
-  const cachedCost = (tokens.cached_input_tokens || 0) * PRICING.cached_input_token;
-  const outputCost = (tokens.output_tokens || 0) * PRICING.output_token;
-  const reasoningCost = (tokens.reasoning_tokens || 0) * PRICING.reasoning_token;
-  const totalCost = inputCost + cachedCost + outputCost + reasoningCost;
-  return Math.round(totalCost * 1000000);
+  return (tokens.input_tokens || 0) * PRICING_MICROCENTS.input_token
+    + (tokens.cached_input_tokens || 0) * PRICING_MICROCENTS.cached_input_token
+    + (tokens.output_tokens || 0) * PRICING_MICROCENTS.output_token
+    + (tokens.reasoning_tokens || 0) * PRICING_MICROCENTS.reasoning_token;
 }
 
 function createRequestHash(payload) {

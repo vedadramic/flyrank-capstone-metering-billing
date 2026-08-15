@@ -8,6 +8,28 @@ services:
       - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d billing"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:dev@db:5432/billing
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:?STRIPE_SECRET_KEY must be set in .env}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:?STRIPE_WEBHOOK_SECRET must be set in .env}
+      STRIPE_PRO_PRICE_ID: ${STRIPE_PRO_PRICE_ID:?STRIPE_PRO_PRICE_ID must be set in .env}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
 
 volumes:
   pgdata:

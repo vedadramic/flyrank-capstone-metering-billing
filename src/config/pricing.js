@@ -1,9 +1,11 @@
-const PRICING = {
-  input_token: 0.000003,
-  cached_input_token: 0.0000015,
-  output_token: 0.000015,
-  reasoning_token: 0.000015,
+const PRICING_MICROCENTS = {
+  input_token: 300,
+  cached_input_token: 150,
+  output_token: 1500,
+  reasoning_token: 1500,
 };
+
+const MICROCENTS_PER_USD = 100000000;
 
 const PLANS = {
   free: {
@@ -20,4 +22,4 @@ const PLANS = {
   },
 };
 
-module.exports = { PRICING, PLANS };
+module.exports = { MICROCENTS_PER_USD, PLANS, PRICING_MICROCENTS };

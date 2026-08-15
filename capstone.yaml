@@ -1,5 +1,5 @@
-run: docker compose up
-seed: node src/scripts/seed.js
+run: docker compose up --build
+seed: docker compose exec app npm run seed
 test: npm test
 base_url: http://localhost:3000
 endpoints:

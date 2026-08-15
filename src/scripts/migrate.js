@@ -119,14 +119,6 @@ async function migrate() {
   `);
 
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS processed_webhook_events (
-      id SERIAL PRIMARY KEY,
-      stripe_event_id TEXT NOT NULL UNIQUE,
-      processed_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-
-  await pool.query(`
     CREATE TABLE IF NOT EXISTS background_jobs (
       id BIGSERIAL PRIMARY KEY,
       job_type TEXT NOT NULL,
@@ -158,6 +150,14 @@ async function migrate() {
       ON usage_events(tenant_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_background_jobs_ready
       ON background_jobs(status, available_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_stripe_customer
+      ON tenants(stripe_customer_id) WHERE stripe_customer_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_stripe_subscription
+      ON tenants(stripe_subscription_id) WHERE stripe_subscription_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_stripe_customer
+      ON subscriptions(stripe_customer_id) WHERE stripe_customer_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_stripe_subscription
+      ON subscriptions(stripe_subscription_id) WHERE stripe_subscription_id IS NOT NULL;
   `);
 
   console.log('Migration complete');

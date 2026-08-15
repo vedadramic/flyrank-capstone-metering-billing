@@ -1,10 +1,13 @@
-run: docker compose up --build
+run: docker compose up -d --build
 seed: docker compose exec app npm run seed
 test: npm test
+acceptance: npm run test:acceptance
 base_url: http://localhost:3000
 endpoints:
+  - GET /health
   - POST /generate
   - GET /usage
+  - POST /checkout/create-session
   - POST /webhooks/stripe
   - POST /auth/signup
   - POST /auth/login

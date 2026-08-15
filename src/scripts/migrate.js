@@ -106,12 +106,37 @@ async function migrate() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS background_jobs (
+      id BIGSERIAL PRIMARY KEY,
+      job_type TEXT NOT NULL,
+      deduplication_key TEXT NOT NULL UNIQUE,
+      payload JSONB NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 3,
+      available_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_error TEXT,
+      completed_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT background_jobs_status_check CHECK (
+        status IN ('pending', 'processing', 'retry', 'completed', 'failed')
+      ),
+      CONSTRAINT background_jobs_attempts_check CHECK (
+        attempts >= 0 AND max_attempts > 0
+      )
+    )
+  `);
+
+  await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_usage_events_tenant_id ON usage_events(tenant_id);
     DROP INDEX IF EXISTS idx_usage_events_idempotency_key;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_events_tenant_idempotency
       ON usage_events(tenant_id, idempotency_key);
     CREATE INDEX IF NOT EXISTS idx_usage_events_tenant_created_at
       ON usage_events(tenant_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_background_jobs_ready
+      ON background_jobs(status, available_at);
   `);
 
   console.log('Migration complete');

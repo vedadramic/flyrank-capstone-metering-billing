@@ -50,23 +50,114 @@ async function migrate() {
       cached_input_tokens INTEGER DEFAULT 0,
       output_tokens INTEGER DEFAULT 0,
       reasoning_tokens INTEGER DEFAULT 0,
-      cost_microcents INTEGER DEFAULT 0,
+      cost_microcents BIGINT DEFAULT 0,
+      request_hash TEXT,
+      response_json JSONB,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
 
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS processed_webhook_events (
-      id SERIAL PRIMARY KEY,
-      stripe_event_id TEXT NOT NULL UNIQUE,
-      processed_at TIMESTAMPTZ DEFAULT NOW()
+    ALTER TABLE usage_events
+      ADD COLUMN IF NOT EXISTS request_hash TEXT,
+      ADD COLUMN IF NOT EXISTS response_json JSONB;
+
+    ALTER TABLE usage_events
+      ALTER COLUMN cost_microcents TYPE BIGINT;
+
+    UPDATE usage_events
+    SET request_hash = 'legacy-' || id
+    WHERE request_hash IS NULL;
+
+    UPDATE usage_events
+    SET response_json = '{}'::jsonb
+    WHERE response_json IS NULL;
+
+    ALTER TABLE usage_events
+      ALTER COLUMN request_hash SET NOT NULL,
+      ALTER COLUMN response_json SET NOT NULL;
+
+    ALTER TABLE usage_events
+      DROP CONSTRAINT IF EXISTS usage_events_idempotency_key_key;
+  `);
+
+  await pool.query(`
+    UPDATE usage_events
+    SET cost_microcents =
+      input_tokens::bigint * 300
+      + cached_input_tokens::bigint * 150
+      + output_tokens::bigint * 1500
+      + reasoning_tokens::bigint * 1500;
+
+    UPDATE usage_events
+    SET response_json = jsonb_set(
+      response_json,
+      '{cost_microcents}',
+      to_jsonb(cost_microcents),
+      true
+    )
+    WHERE response_json <> '{}'::jsonb;
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'usage_events_non_negative_check'
+      ) THEN
+        ALTER TABLE usage_events ADD CONSTRAINT usage_events_non_negative_check CHECK (
+          quantity >= 0 AND
+          input_tokens >= 0 AND
+          cached_input_tokens >= 0 AND
+          output_tokens >= 0 AND
+          reasoning_tokens >= 0 AND
+          cost_microcents >= 0
+        );
+      END IF;
+    END
+    $$;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS background_jobs (
+      id BIGSERIAL PRIMARY KEY,
+      job_type TEXT NOT NULL,
+      deduplication_key TEXT NOT NULL UNIQUE,
+      payload JSONB NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 3,
+      available_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_error TEXT,
+      completed_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT background_jobs_status_check CHECK (
+        status IN ('pending', 'processing', 'retry', 'completed', 'failed')
+      ),
+      CONSTRAINT background_jobs_attempts_check CHECK (
+        attempts >= 0 AND max_attempts > 0
+      )
     )
   `);
 
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_usage_events_tenant_id ON usage_events(tenant_id);
-    CREATE INDEX IF NOT EXISTS idx_usage_events_idempotency_key ON usage_events(idempotency_key);
-    CREATE INDEX IF NOT EXISTS idx_usage_events_created_at ON usage_events(created_at);
+    DROP INDEX IF EXISTS idx_usage_events_idempotency_key;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_events_tenant_idempotency
+      ON usage_events(tenant_id, idempotency_key);
+    CREATE INDEX IF NOT EXISTS idx_usage_events_tenant_created_at
+      ON usage_events(tenant_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_background_jobs_ready
+      ON background_jobs(status, available_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_stripe_customer
+      ON tenants(stripe_customer_id) WHERE stripe_customer_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_stripe_subscription
+      ON tenants(stripe_subscription_id) WHERE stripe_subscription_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_stripe_customer
+      ON subscriptions(stripe_customer_id) WHERE stripe_customer_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_stripe_subscription
+      ON subscriptions(stripe_subscription_id) WHERE stripe_subscription_id IS NOT NULL;
   `);
 
   console.log('Migration complete');

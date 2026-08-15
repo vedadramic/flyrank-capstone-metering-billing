@@ -2,18 +2,24 @@
   "name": "flyrank-capstone-metering-billing",
   "version": "1.0.0",
   "description": "Usage Metering & Billing Engine — the backend service that tracks how much customers use, enforces plan quotas, calculates costs, and integrates Stripe for subscription management.",
-  "main": "index.js",
-"scripts": {
-  "start": "node --env-file=.env src/server.js",
-  "test": "node scripts/jest.js --runInBand"
-},
+  "main": "src/server.js",
+  "scripts": {
+    "migrate": "node --env-file-if-exists=.env src/scripts/migrate.js",
+    "seed": "node --env-file-if-exists=.env src/scripts/seed.js",
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "test": "node scripts/jest.js --runInBand",
+    "test:acceptance": "node scripts/jest.js --runInBand src/tests/generate.test.js src/tests/meter.test.js src/tests/usage.test.js src/tests/webhook.test.js src/tests/checkout.test.js"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/vedadramic/flyrank-capstone-metering-billing.git"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.6.0"
+  },
   "bugs": {
     "url": "https://github.com/vedadramic/flyrank-capstone-metering-billing/issues"
   },

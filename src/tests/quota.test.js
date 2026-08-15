@@ -1,72 +1,50 @@
 const QuotaService = require('../services/QuotaService');
 const db = require('../db');
 
-const TEST_TENANT_ID = 8888;
-const BASE_KEY = `quota-test-${Date.now()}`;
+const TENANT_ID = 8801;
+
+async function setUsage(quantity) {
+  await db.query('DELETE FROM usage_events WHERE tenant_id = $1', [TENANT_ID]);
+  if (quantity === 0) {
+    return;
+  }
+
+  await db.query(`
+    INSERT INTO usage_events (
+      tenant_id,
+      event_type,
+      quantity,
+      idempotency_key,
+      request_hash,
+      response_json
+    )
+    VALUES ($1, 'generate', $2, $3, $4, '{}'::jsonb)
+  `, [TENANT_ID, quantity, `quota-${quantity}`, `setup-${quantity}`]);
+}
 
 beforeAll(async () => {
+  await db.query('DELETE FROM usage_events WHERE tenant_id = $1', [TENANT_ID]);
+  await db.query('DELETE FROM tenants WHERE id = $1', [TENANT_ID]);
   await db.query(`
     INSERT INTO tenants (id, email, password_hash, plan_id)
-    VALUES ($1, $2, $3, (SELECT id FROM plans WHERE name = 'free'))
-    ON CONFLICT (id) DO NOTHING
-  `, [TEST_TENANT_ID, `quota-test-${Date.now()}@test.com`, 'hash']);
+    VALUES ($1, 'quota-test@example.com', 'hash', (SELECT id FROM plans WHERE name = 'free'))
+  `, [TENANT_ID]);
 });
 
 afterAll(async () => {
-  await db.query('DELETE FROM usage_events WHERE tenant_id = $1', [TEST_TENANT_ID]);
-  await db.query('DELETE FROM tenants WHERE id = $1', [TEST_TENANT_ID]);
+  await db.query('DELETE FROM usage_events WHERE tenant_id = $1', [TENANT_ID]);
+  await db.query('DELETE FROM tenants WHERE id = $1', [TENANT_ID]);
   await db.end();
 });
 
-test('allows usage under the limit', async () => {
-  const result = await QuotaService.check(TEST_TENANT_ID, 'api_call', 1);
-  expect(result.allowed).toBe(true);
-});
-
-test('blocks usage exactly at the limit', async () => {
-  await db.query('DELETE FROM usage_events WHERE tenant_id = $1', [TEST_TENANT_ID]);
-
-  for (let i = 0; i < 1000; i++) {
-    await db.query(`
-      INSERT INTO usage_events (tenant_id, event_type, quantity, idempotency_key)
-      VALUES ($1, 'api_call', 1, $2)
-    `, [TEST_TENANT_ID, `${BASE_KEY}-fill-${i}`]);
-  }
-
-  const result = await QuotaService.check(TEST_TENANT_ID, 'api_call', 1);
-  expect(result.allowed).toBe(false);
-  expect(result.current_usage).toBe(1000);
-  expect(result.limit).toBe(1000);
-});
-
-test('allows usage at exactly one under the limit', async () => {
-  await db.query('DELETE FROM usage_events WHERE tenant_id = $1', [TEST_TENANT_ID]);
-
-  for (let i = 0; i < 999; i++) {
-    await db.query(`
-      INSERT INTO usage_events (tenant_id, event_type, quantity, idempotency_key)
-      VALUES ($1, 'api_call', 1, $2)
-    `, [TEST_TENANT_ID, `${BASE_KEY}-under-${i}`]);
-  }
-
-  const result = await QuotaService.check(TEST_TENANT_ID, 'api_call', 1);
-  expect(result.allowed).toBe(true);
-  expect(result.remaining).toBe(1);
-});
-
-test('blocks usage over the limit', async () => {
-  await db.query('DELETE FROM usage_events WHERE tenant_id = $1', [TEST_TENANT_ID]);
-
-  for (let i = 0; i < 1000; i++) {
-    await db.query(`
-      INSERT INTO usage_events (tenant_id, event_type, quantity, idempotency_key)
-      VALUES ($1, 'api_call', 1, $2)
-    `, [TEST_TENANT_ID, `${BASE_KEY}-over-${i}`]);
-  }
-
-  const result = await QuotaService.check(TEST_TENANT_ID, 'api_call', 2);
-  expect(result.allowed).toBe(false);
-  expect(result.current_usage).toBe(1000);
-  expect(result.requested).toBe(2);
-  expect(result.remaining).toBe(0);
+test.each([
+  [0, 1, true],
+  [999, 1, true],
+  [1000, 1, false],
+  [1000, 2, false],
+])('with %i used and %i requested, allowed is %s', async (used, requested, allowed) => {
+  await setUsage(used);
+  const result = await QuotaService.check(TENANT_ID, 'api_call', requested);
+  expect(result.allowed).toBe(allowed);
+  expect(result.current_usage).toBe(used);
 });

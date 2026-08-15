@@ -2,8 +2,16 @@ const express = require('express');
 const { requireAuth } = require('../middleware/auth');
 const MeterService = require('../services/MeterService');
 const db = require('../db');
+const { MICROCENTS_PER_USD } = require('../config/pricing');
 
 const router = express.Router();
+
+function formatMicrocentsAsUsd(value) {
+  const microcents = BigInt(value);
+  const wholeDollars = microcents / BigInt(MICROCENTS_PER_USD);
+  const fraction = (microcents % BigInt(MICROCENTS_PER_USD)).toString().padStart(8, '0');
+  return `${wholeDollars}.${fraction}`;
+}
 
 router.get('/', requireAuth, async (req, res) => {
   const tenantResult = await db.query(`
@@ -14,6 +22,10 @@ router.get('/', requireAuth, async (req, res) => {
   `, [req.tenantId]);
 
   const tenant = tenantResult.rows[0];
+  if (!tenant) {
+    return res.status(404).json({ error: 'Tenant not found' });
+  }
+
   const usageRows = await MeterService.getMonthlyUsage(req.tenantId);
   const usageTotals = usageRows[0] || { api_calls_used: '0', ai_tokens_used: '0', total_cost_microcents: '0' };
 
@@ -22,14 +34,14 @@ router.get('/', requireAuth, async (req, res) => {
   const totalCostMicrocents = parseInt(usageTotals.total_cost_microcents, 10);
 
   const usage = {
-    api_calls: { used: apiCallsUsed, limit: tenant.api_calls_limit, cost_microcents: totalCostMicrocents },
+    api_calls: { used: apiCallsUsed, limit: tenant.api_calls_limit, cost_microcents: 0 },
     ai_tokens: { used: aiTokensUsed, limit: tenant.ai_tokens_limit, cost_microcents: totalCostMicrocents },
   };
 
   res.json({
     tenant: { email: tenant.email, plan: tenant.plan_name },
     usage,
-    total_cost_usd: (totalCostMicrocents / 1000000).toFixed(6),
+    total_cost_usd: formatMicrocentsAsUsd(totalCostMicrocents),
     total_cost_microcents: totalCostMicrocents,
   });
 });

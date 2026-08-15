@@ -51,8 +51,50 @@ async function migrate() {
       output_tokens INTEGER DEFAULT 0,
       reasoning_tokens INTEGER DEFAULT 0,
       cost_microcents INTEGER DEFAULT 0,
+      request_hash TEXT,
+      response_json JSONB,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
+  `);
+
+  await pool.query(`
+    ALTER TABLE usage_events
+      ADD COLUMN IF NOT EXISTS request_hash TEXT,
+      ADD COLUMN IF NOT EXISTS response_json JSONB;
+
+    UPDATE usage_events
+    SET request_hash = 'legacy-' || id
+    WHERE request_hash IS NULL;
+
+    UPDATE usage_events
+    SET response_json = '{}'::jsonb
+    WHERE response_json IS NULL;
+
+    ALTER TABLE usage_events
+      ALTER COLUMN request_hash SET NOT NULL,
+      ALTER COLUMN response_json SET NOT NULL;
+
+    ALTER TABLE usage_events
+      DROP CONSTRAINT IF EXISTS usage_events_idempotency_key_key;
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'usage_events_non_negative_check'
+      ) THEN
+        ALTER TABLE usage_events ADD CONSTRAINT usage_events_non_negative_check CHECK (
+          quantity >= 0 AND
+          input_tokens >= 0 AND
+          cached_input_tokens >= 0 AND
+          output_tokens >= 0 AND
+          reasoning_tokens >= 0 AND
+          cost_microcents >= 0
+        );
+      END IF;
+    END
+    $$;
   `);
 
   await pool.query(`
@@ -65,8 +107,11 @@ async function migrate() {
 
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_usage_events_tenant_id ON usage_events(tenant_id);
-    CREATE INDEX IF NOT EXISTS idx_usage_events_idempotency_key ON usage_events(idempotency_key);
-    CREATE INDEX IF NOT EXISTS idx_usage_events_created_at ON usage_events(created_at);
+    DROP INDEX IF EXISTS idx_usage_events_idempotency_key;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_events_tenant_idempotency
+      ON usage_events(tenant_id, idempotency_key);
+    CREATE INDEX IF NOT EXISTS idx_usage_events_tenant_created_at
+      ON usage_events(tenant_id, created_at);
   `);
 
   console.log('Migration complete');

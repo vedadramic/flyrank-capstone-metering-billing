@@ -1,5 +1,4 @@
 const db = require('../db');
-const { PLANS } = require('../config/pricing');
 
 async function check(tenantId, eventType, quantity) {
   const tenantResult = await db.query(`
@@ -17,9 +16,21 @@ async function check(tenantId, eventType, quantity) {
 
   let usageSql;
   if (eventType === 'api_call') {
-    usageSql = `SELECT COALESCE(SUM(quantity), 0) as used FROM usage_events WHERE tenant_id = $1 AND created_at >= date_trunc('month', NOW())`;
+    usageSql = `
+      SELECT COALESCE(SUM(quantity), 0) as used
+      FROM usage_events
+      WHERE tenant_id = $1
+        AND created_at >= date_trunc('month', NOW())
+        AND created_at < date_trunc('month', NOW()) + INTERVAL '1 month'
+    `;
   } else if (eventType === 'ai_token') {
-    usageSql = `SELECT COALESCE(SUM(input_tokens + cached_input_tokens + output_tokens + reasoning_tokens), 0) as used FROM usage_events WHERE tenant_id = $1 AND created_at >= date_trunc('month', NOW())`;
+    usageSql = `
+      SELECT COALESCE(SUM(input_tokens + cached_input_tokens + output_tokens + reasoning_tokens), 0) as used
+      FROM usage_events
+      WHERE tenant_id = $1
+        AND created_at >= date_trunc('month', NOW())
+        AND created_at < date_trunc('month', NOW()) + INTERVAL '1 month'
+    `;
   } else {
     throw new Error(`Unknown event type: ${eventType}`);
   }

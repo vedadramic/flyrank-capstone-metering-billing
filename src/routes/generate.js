@@ -2,7 +2,6 @@ const express = require('express');
 const { z } = require('zod');
 const { requireAuth } = require('../middleware/auth');
 const MeterService = require('../services/MeterService');
-const QuotaService = require('../services/QuotaService');
 
 const router = express.Router();
 
@@ -17,8 +16,8 @@ const GenerateSchema = z.object({
 router.post('/', requireAuth, async (req, res) => {
   const idempotencyKey = req.headers['idempotency-key'];
 
-  if (!idempotencyKey) {
-    return res.status(400).json({ error: 'Idempotency-Key header is required' });
+  if (typeof idempotencyKey !== 'string' || idempotencyKey.length < 1 || idempotencyKey.length > 255) {
+    return res.status(400).json({ error: 'Idempotency-Key header is required and must be at most 255 characters' });
   }
 
   const parsed = GenerateSchema.safeParse(req.body);
@@ -26,61 +25,48 @@ router.post('/', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Invalid input', details: parsed.error.issues });
   }
 
-  const { prompt, input_tokens, cached_input_tokens, output_tokens, reasoning_tokens } = parsed.data;
-  const totalTokens = input_tokens + cached_input_tokens + output_tokens + reasoning_tokens;
+  const result = await MeterService.recordGenerateUsage(
+    req.tenantId,
+    idempotencyKey,
+    parsed.data
+  );
 
-  const existingEvent = await MeterService.findByIdempotencyKey(idempotencyKey);
-  if (existingEvent) {
-    return res.status(200).json({
-      result: `Simulated AI response to: "${prompt}"`,
+  if (result.outcome === 'tenant_not_found') {
+    return res.status(401).json({ error: 'Authenticated tenant no longer exists' });
+  }
+
+  if (result.outcome === 'idempotency_conflict') {
+    return res.status(409).json({
+      error: 'Idempotency-Key was already used with a different request payload',
+    });
+  }
+
+  if (result.outcome === 'payment_required') {
+    return res.status(402).json({
+      error: 'Payment required',
+      message: `Subscription status is ${result.status}. Update payment details before making billable requests.`,
+    });
+  }
+
+  if (result.outcome === 'quota_exceeded') {
+    res.set('Retry-After', '3600');
+    return res.status(429).json({
+      error: `${result.resource} quota exceeded`,
       usage: {
-        input_tokens: existingEvent.input_tokens,
-        cached_input_tokens: existingEvent.cached_input_tokens,
-        output_tokens: existingEvent.output_tokens,
-        reasoning_tokens: existingEvent.reasoning_tokens,
-        total_tokens: existingEvent.input_tokens + existingEvent.cached_input_tokens + existingEvent.output_tokens + existingEvent.reasoning_tokens,
+        used: result.used,
+        limit: result.limit,
+        requested: result.requested,
+        remaining: Math.max(0, result.limit - result.used),
       },
-      cost_microcents: existingEvent.cost_microcents,
-      idempotent: true,
+      message: `This request would exceed the ${result.limit} ${result.resource} monthly limit on the ${result.plan} plan.`,
     });
   }
 
-  const apiQuota = await QuotaService.check(req.tenantId, 'api_call', 1);
-  if (!apiQuota.allowed) {
-    return res.status(429).json({
-      error: 'API call quota exceeded',
-      usage: { used: apiQuota.current_usage, limit: apiQuota.limit, remaining: 0 },
-      message: `You have used ${apiQuota.current_usage} of ${apiQuota.limit} API calls this month. Upgrade to Pro for higher limits.`,
-    });
+  if (result.outcome === 'replayed') {
+    res.set('Idempotency-Replayed', 'true');
   }
 
-  const tokenQuota = await QuotaService.check(req.tenantId, 'ai_token', totalTokens);
-  if (!tokenQuota.allowed) {
-    return res.status(429).json({
-      error: 'AI token quota exceeded',
-      usage: { used: tokenQuota.current_usage, limit: tokenQuota.limit, remaining: tokenQuota.remaining },
-      message: `You have used ${tokenQuota.current_usage} of ${tokenQuota.limit} AI tokens this month.`,
-    });
-  }
-
-  const tokens = { input_tokens, cached_input_tokens, output_tokens, reasoning_tokens };
-
-  const apiResult = await MeterService.record(req.tenantId, 'generate', 1, idempotencyKey, tokens);
-
-  const response = {
-    result: `Simulated AI response to: "${prompt}"`,
-    usage: {
-      input_tokens,
-      cached_input_tokens,
-      output_tokens,
-      reasoning_tokens,
-      total_tokens: totalTokens,
-    },
-    cost_microcents: apiResult.event.cost_microcents,
-    idempotent: !apiResult.created,
-  };
-
-  res.status(apiResult.created ? 201 : 200).json(response);
+  return res.status(201).json(result.response);
 });
 
 module.exports = router;
